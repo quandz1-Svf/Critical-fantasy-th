@@ -1,25 +1,12 @@
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 
--- GUI toggle
-local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.ResetOnSpawn = false
-
-local btn = Instance.new("TextButton", gui)
-btn.Size = UDim2.new(0, 220, 0, 48)
-btn.Position = UDim2.new(0.5, -110, 0.5, -24)
-btn.Text = "Auto Orb OFF"
-btn.Font = Enum.Font.SourceSansBold
-btn.TextSize = 18
-btn.BackgroundColor3 = Color3.fromRGB(60, 120, 200) -- xanh khi OFF
-btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-btn.Draggable = true
-
 -- Biến
-local running = false
+local running = true
 local flight = { bp = nil, bg = nil, hrp = nil }
-local SAFE_Y = 250       -- Độ cao an toàn
-local ORB_Y_OFFSET = 5.2 -- Độ cao khi nhặt orb
+local ORB_Y_POSITION = 151.7
+local SAFE_Y_POSITION = 250
+local lastOrbTime = 0
 
 -- Attach BodyPosition + BodyGyro
 local function attachFlight(hrp)
@@ -85,7 +72,7 @@ local function getClosestOrb()
 	return closestOrb
 end
 
--- Move tới vị trí chỉ định
+-- Di chuyển tới vị trí chỉ định
 local function moveToTarget(pos, yLevel)
 	if not flight.bp then return end
 	local finalPos = Vector3.new(pos.X, yLevel, pos.Z)
@@ -94,41 +81,35 @@ end
 
 -- Auto Orb loop
 local function runAuto()
-	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if not hrp then hrp = player.CharacterAdded:Wait():WaitForChild("HumanoidRootPart") end
-	attachFlight(hrp)
-
 	while running do
+		local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if not hrp then hrp = player.CharacterAdded:Wait():WaitForChild("HumanoidRootPart") end
+		
 		local orb = getClosestOrb()
-		if orb then
-			moveToTarget(orb.Position, orb.Position.Y + ORB_Y_OFFSET)
+		if orb and orb.Parent then
+			lastOrbTime = tick()
+			if not flight.bp then
+				attachFlight(hrp)
+			end
+			moveToTarget(orb.Position, ORB_Y_POSITION)
 		else
-			moveToTarget(hrp.Position, SAFE_Y)
+			if flight.bp then
+				if tick() - lastOrbTime > 4 then
+					detachFlight()
+				else
+					moveToTarget(hrp.Position, SAFE_Y_POSITION)
+				end
+			end
 		end
 		task.wait(0.5)
 	end
-
-	detachFlight()
 end
 
--- Nút bật/tắt
-btn.MouseButton1Click:Connect(function()
-	running = not running
-	if running then
-		btn.Text = "Auto Orb ON"
-		btn.BackgroundColor3 = Color3.fromRGB(200, 60, 60) -- đỏ khi ON
-		task.spawn(runAuto)
-	else
-		btn.Text = "Auto Orb OFF"
-		btn.BackgroundColor3 = Color3.fromRGB(60, 120, 200) -- xanh khi OFF
-		detachFlight()
-	end
-end)
+-- Bắt đầu chạy script ngay khi nó được tải
+task.spawn(runAuto)
 
--- Khi respawn thì gắn lại flight nếu đang bật
 player.CharacterAdded:Connect(function(char)
 	if running then
-		local hrp = char:WaitForChild("HumanoidRootPart")
-		attachFlight(hrp)
+		-- Tạm thời không làm gì ở đây, logic attach/detach được xử lý trong vòng lặp chính
 	end
 end)
