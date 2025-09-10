@@ -1,0 +1,174 @@
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+-- Biến
+local running = true
+local flight = { bp = nil, bg = nil, hrp = nil }
+local CONSTANT_Y_POSITION = 100.6 -- Tọa độ Y cố định an toàn để tránh gai
+
+-- Chờ 4 giây trước khi bắt đầu
+task.wait(4)
+
+-- Attach BodyPosition + BodyGyro vào HRP
+local function attachFlight(hrp)
+	if flight.bp then flight.bp:Destroy() end
+	if flight.bg then flight.bg:Destroy() end
+	flight.hrp = hrp
+
+	flight.bp = Instance.new("BodyPosition")
+	flight.bp.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+	flight.bp.P = 30000
+	flight.bp.D = 1000
+	flight.bp.Position = hrp.Position
+	flight.bp.Parent = hrp
+
+	flight.bg = Instance.new("BodyGyro")
+	flight.bg.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+	flight.bg.P = 30000
+	flight.bg.CFrame = hrp.CFrame
+	flight.bg.Parent = hrp
+end
+
+local function detachFlight()
+	if flight.bp then flight.bp:Destroy() end
+	if flight.bg then flight.bg:Destroy() end
+	flight.bp, flight.bg, flight.hrp = nil, nil, nil
+end
+
+-- Lấy danh sách orb
+local function getOrbs()
+	local container = workspace:FindFirstChild("OrbContainer_5370403716")
+	local list = {}
+	if container then
+		for _, child in ipairs(container:GetChildren()) do
+			if child.Name == "ChainOrb" then
+				local part = child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart")
+				if part and part.Parent and part.Parent == child then table.insert(list, part) end
+			end
+		end
+	end
+	return list
+end
+
+-- Tìm orb gần nhất
+local function getClosestOrb()
+	local orbs = getOrbs()
+	if #orbs == 0 then return nil end
+
+	local closestOrb = nil
+	local closestDist = math.huge
+	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return nil end
+
+	for _, orb in ipairs(orbs) do
+		local dist = (orb.Position - hrp.Position).Magnitude
+		if dist < closestDist then
+			closestDist = dist
+			closestOrb = orb
+		end
+	end
+
+	return closestOrb
+end
+
+-- Tìm & ấn DungeonStart
+local function pressStart()
+	for _, v in ipairs(player.PlayerGui:GetDescendants()) do
+		if v.Name == "DungeonStart" and (v:IsA("TextButton") or v:IsA("ImageButton")) then
+			pcall(function() firesignal(v.MouseButton1Click) end)
+			return true
+		end
+	end
+	return false
+end
+
+-- Tìm & ấn DungeonRestart
+local function pressRestart()
+	for _, v in ipairs(player.PlayerGui:GetDescendants()) do
+		if v.Name == "DungeonRestart" and (v:IsA("TextButton") or v:IsA("ImageButton")) then
+			pcall(function() firesignal(v.MouseButton1Click) end)
+			return true
+		end
+	end
+	return false
+end
+
+-- Tìm boss model trong Entities
+local function getBoss()
+	local ent = workspace:FindFirstChild("Entities")
+	if ent then
+		for _, c in ipairs(ent:GetChildren()) do
+			if c:IsA("Model") then return c end
+		end
+	end
+	return nil
+end
+
+-- Di chuyển nhân vật đến một vị trí và duy trì độ cao cố định
+local function moveToTarget(targetPos)
+	local finalPos = Vector3.new(targetPos.X, CONSTANT_Y_POSITION, targetPos.Z)
+	flight.bp.Position = finalPos
+end
+
+-- Chạy auto orb
+local function runAuto()
+	while running do
+		-- Ấn start
+		pressStart()
+		task.wait(1)
+
+		-- Chờ boss xuất hiện
+		local boss
+		repeat
+			boss = getBoss()
+			task.wait(0.5)
+		until boss or not running
+
+		if not running then break end
+		print("[AutoOrb] Boss found:", boss.Name)
+
+		-- Gắn flight
+		local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if not hrp then hrp = player.CharacterAdded:Wait():WaitForChild("HumanoidRootPart") end
+		attachFlight(hrp)
+
+		-- Đến gần boss để kích hoạt
+		local bossRootPart = boss:FindFirstChild("HumanoidRootPart")
+		if bossRootPart then
+			moveToTarget(bossRootPart.Position)
+			task.wait(2.5)
+		end
+		
+		-- Ăn orb
+		while running and getBoss() do
+			local orb = getClosestOrb()
+			if orb and orb.Parent then
+				-- bay đến orb
+				moveToTarget(orb.Position)
+				task.wait(1)
+			else
+				-- hover trên không
+				if hrp then
+					moveToTarget(hrp.Position)
+				end
+				task.wait(0.5)
+			end
+		end
+
+		detachFlight()
+		print("[AutoOrb] Boss defeated or loop ended, restarting...")
+		pressRestart()
+		task.wait(2)
+	end
+end
+
+-- Bắt đầu chạy script
+task.spawn(runAuto)
+
+-- Khi respawn thì gắn lại flight nếu đang bật
+player.CharacterAdded:Connect(function(char)
+	if running then
+		local hrp = char:WaitForChild("HumanoidRootPart")
+		attachFlight(hrp)
+	end
+end)
