@@ -94,7 +94,7 @@ local function runAuto()
 			moveToTarget(orb.Position, ORB_Y_POSITION)
 		else
 			if flight.bp then
-				if tick() - lastOrbTime > 4 then
+				if tick() - lastOrbTime > 3.5 then
 					detachFlight()
 				else
 					moveToTarget(hrp.Position, SAFE_Y_POSITION)
