@@ -4,9 +4,9 @@ local player = Players.LocalPlayer
 -- Biến
 local running = true
 local flight = { bp = nil, bg = nil, hrp = nil }
-local ORB_Y_POSITION = 151.7
-local SAFE_Y_POSITION = 250
 local lastOrbTime = 0
+local HOVER_OFFSET = 50 -- Khoảng cách bay lơ lửng so với vị trí hiện tại
+local hasHovered = false -- Kiểm tra xem đã thiết lập vị trí lơ lửng chưa
 
 -- Attach BodyPosition + BodyGyro
 local function attachFlight(hrp)
@@ -32,19 +32,21 @@ local function detachFlight()
 	if flight.bp then flight.bp:Destroy() end
 	if flight.bg then flight.bg:Destroy() end
 	flight.bp, flight.bg, flight.hrp = nil, nil, nil
+	hasHovered = false
 end
 
--- Lấy danh sách orb
+-- Lấy danh sách orb trong phạm vi gần
 local function getOrbs()
 	local container = workspace:FindFirstChild("OrbContainer_5370403716")
 	local list = {}
-	if container then
-		for _, child in ipairs(container:GetChildren()) do
-			if child.Name == "ChainOrb" then
-				local part = child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart")
-				if part and part.Parent and part.Parent == child then
-					table.insert(list, part)
-				end
+	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp or not container then return list end
+
+	for _, child in ipairs(container:GetChildren()) do
+		if child.Name == "ChainOrb" then
+			local part = child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart")
+			if part and (part.Position - hrp.Position).Magnitude < 200 then
+				table.insert(list, part)
 			end
 		end
 	end
@@ -91,13 +93,21 @@ local function runAuto()
 			if not flight.bp then
 				attachFlight(hrp)
 			end
-			moveToTarget(orb.Position, ORB_Y_POSITION)
+			-- Lấy tọa độ Y của orb và bay cao hơn một chút
+			moveToTarget(orb.Position, orb.Position.Y + 5)
+			hasHovered = false -- Reset trạng thái lơ lửng
 		else
 			if flight.bp then
-				if tick() - lastOrbTime > 3.5 then
+				if tick() - lastOrbTime > 3.4 then
 					detachFlight()
 				else
-					moveToTarget(hrp.Position, SAFE_Y_POSITION)
+					if not hasHovered then
+						-- Chỉ thiết lập vị trí bay lơ lửng một lần
+						flight.bp.Position = Vector3.new(hrp.Position.X, hrp.Position.Y + HOVER_OFFSET, hrp.Position.Z)
+						hasHovered = true
+					end
+					-- Duy trì vị trí đã thiết lập
+					moveToTarget(hrp.Position, flight.bp.Position.Y)
 				end
 			end
 		end
@@ -105,11 +115,13 @@ local function runAuto()
 	end
 end
 
--- Bắt đầu chạy script ngay khi nó được tải
+-- Bắt đầu chạy script
 task.spawn(runAuto)
 
+-- Khi respawn thì gắn lại flight nếu đang bật
 player.CharacterAdded:Connect(function(char)
 	if running then
-		-- Tạm thời không làm gì ở đây, logic attach/detach được xử lý trong vòng lặp chính
+		local hrp = char:WaitForChild("HumanoidRootPart")
+		attachFlight(hrp)
 	end
 end)
