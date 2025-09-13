@@ -1,14 +1,76 @@
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 
--- Biến
-local running = true
+-- GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "SimpleMobileMenu"
+screenGui.Parent = player:WaitForChild("PlayerGui")
+screenGui.ResetOnSpawn = false
+
+-- Main frame
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0.5, 0, 0.6, 0)
+mainFrame.Position = UDim2.new(0.25, 0, 0.2, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+
+-- Title (có thể kéo)
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0.1, 0)
+title.Text = "Eternal Land Tool (Chạm giữ để kéo)"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+title.Parent = mainFrame
+
+-- Toggle menu button (X)
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0.15, 0, 0.08, 0)
+toggleButton.Position = UDim2.new(0.02, 0, 0.02, 0)
+toggleButton.Text = "X"
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+toggleButton.Parent = screenGui
+
+toggleButton.MouseButton1Click:Connect(function()
+	mainFrame.Visible = not mainFrame.Visible
+end)
+
+-- Nút chức năng
+local buttons = {
+	{Name = "Auto Farm: TẮT", Type = "toggle", Command = "farm"},
+	{Name = "Chiêu 1", Type = "button", Command = "skill1"},
+	{Name = "Chiêu 2", Type = "button", Command = "skill2"},
+	{Name = "Chiêu 3", Type = "button", Command = "skill3"},
+	{Name = "Thoát Tool", Type = "button", Command = "exit"}
+}
+
+local buttonInstances = {}
+
+for i, btnInfo in ipairs(buttons) do
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.new(0.9, 0, 0.12, 0)
+	button.Position = UDim2.new(0.05, 0, 0.15 + (i-1)*0.15, 0)
+	button.Text = btnInfo.Name
+	button.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+	if btnInfo.Type == "toggle" then
+		button.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+	else
+		button.BackgroundColor3 = Color3.fromRGB(50, 50, 150)
+	end
+
+	button.Parent = mainFrame
+	buttonInstances[btnInfo.Command] = button
+end
+
+-- === FARM CODE ===
+local running = false
 local flight = { bp = nil, bg = nil, hrp = nil }
 local lastOrbTime = 0
-local HOVER_OFFSET = 50 -- Khoảng cách bay lơ lửng so với vị trí hiện tại
-local hasHovered = false -- Kiểm tra xem đã thiết lập vị trí lơ lửng chưa
+local HOVER_OFFSET = 50
+local hasHovered = false
 
--- Attach BodyPosition + BodyGyro
 local function attachFlight(hrp)
 	if flight.bp then flight.bp:Destroy() end
 	if flight.bg then flight.bg:Destroy() end
@@ -35,7 +97,6 @@ local function detachFlight()
 	hasHovered = false
 end
 
--- Lấy danh sách orb trong phạm vi gần
 local function getOrbs()
 	local container = workspace:FindFirstChild("OrbContainer_5370403716")
 	local list = {}
@@ -43,7 +104,7 @@ local function getOrbs()
 	if not hrp or not container then return list end
 
 	for _, child in ipairs(container:GetChildren()) do
-		if child.Name == "ChainOrb" then
+		if child:IsA("Model") then
 			local part = child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart")
 			if part and (part.Position - hrp.Position).Magnitude < 200 then
 				table.insert(list, part)
@@ -53,7 +114,6 @@ local function getOrbs()
 	return list
 end
 
--- Tìm orb gần nhất
 local function getClosestOrb()
 	local orbs = getOrbs()
 	if #orbs == 0 then return nil end
@@ -70,43 +130,36 @@ local function getClosestOrb()
 			closestOrb = orb
 		end
 	end
-
 	return closestOrb
 end
 
--- Di chuyển tới vị trí chỉ định
 local function moveToTarget(pos, yLevel)
 	if not flight.bp then return end
-	local finalPos = Vector3.new(pos.X, yLevel, pos.Z)
-	flight.bp.Position = finalPos
+	flight.bp.Position = Vector3.new(pos.X, yLevel, pos.Z)
 end
 
--- Auto Orb loop
 local function runAuto()
 	while running do
 		local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 		if not hrp then hrp = player.CharacterAdded:Wait():WaitForChild("HumanoidRootPart") end
-		
+
 		local orb = getClosestOrb()
 		if orb and orb.Parent then
 			lastOrbTime = tick()
 			if not flight.bp then
 				attachFlight(hrp)
 			end
-			-- Lấy tọa độ Y của orb và bay cao hơn một chút
 			moveToTarget(orb.Position, orb.Position.Y + 5)
-			hasHovered = false -- Reset trạng thái lơ lửng
+			hasHovered = false
 		else
 			if flight.bp then
 				if tick() - lastOrbTime > 3.4 then
 					detachFlight()
 				else
 					if not hasHovered then
-						-- Chỉ thiết lập vị trí bay lơ lửng một lần
 						flight.bp.Position = Vector3.new(hrp.Position.X, hrp.Position.Y + HOVER_OFFSET, hrp.Position.Z)
 						hasHovered = true
 					end
-					-- Duy trì vị trí đã thiết lập
 					moveToTarget(hrp.Position, flight.bp.Position.Y)
 				end
 			end
@@ -115,13 +168,80 @@ local function runAuto()
 	end
 end
 
--- Bắt đầu chạy script
-task.spawn(runAuto)
+-- === NÚT CHỨC NĂNG ===
+buttonInstances["farm"].MouseButton1Click:Connect(function()
+	running = not running
 
--- Khi respawn thì gắn lại flight nếu đang bật
+	if running then
+		buttonInstances["farm"].Text = "Auto Farm: BẬT"
+		buttonInstances["farm"].BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+		task.spawn(runAuto)
+	else
+		buttonInstances["farm"].Text = "Auto Farm: TẮT"
+		buttonInstances["farm"].BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+		detachFlight()
+	end
+end)
+
+buttonInstances["skill1"].MouseButton1Click:Connect(function()
+	game.ReplicatedStorage.EternalLand.Hyacine_RELIABLE:FireServer(buffer.fromstring("\005\001\a\000Active1"), {})
+end)
+
+buttonInstances["skill2"].MouseButton1Click:Connect(function()
+	game.ReplicatedStorage.EternalLand.Hyacine_RELIABLE:FireServer(buffer.fromstring("\005\001\a\000Active2"), {})
+end)
+
+buttonInstances["skill3"].MouseButton1Click:Connect(function()
+	game.ReplicatedStorage.EternalLand.Hyacine_RELIABLE:FireServer(buffer.fromstring("\005\001\a\000Active3"), {})
+end)
+
+buttonInstances["exit"].MouseButton1Click:Connect(function()
+	screenGui:Destroy()
+	if running then
+		detachFlight()
+		running = false
+	end
+end)
+
 player.CharacterAdded:Connect(function(char)
 	if running then
 		local hrp = char:WaitForChild("HumanoidRootPart")
 		attachFlight(hrp)
+	end
+end)
+
+-- Thêm drag (kéo) cho mainFrame
+local UIS = game:GetService("UserInputService")
+local dragging, dragInput, dragStart, startPos
+
+title.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = mainFrame.Position
+
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+title.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInput = input
+	end
+end)
+
+UIS.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		local delta = input.Position - dragStart
+		mainFrame.Position = UDim2.new(
+			startPos.X.Scale,
+			startPos.X.Offset + delta.X,
+			startPos.Y.Scale,
+			startPos.Y.Offset + delta.Y
+		)
 	end
 end)
