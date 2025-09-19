@@ -1,0 +1,133 @@
+-- ⚔️ Auto Attack GUI with Toggle + Anti Reset
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+-- ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AutoAttackGUI"
+ScreenGui.ResetOnSpawn = false -- ✅ Không mất khi chết
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Toggle Button (nhỏ gọn ở góc)
+local ToggleBtn = Instance.new("TextButton", ScreenGui)
+ToggleBtn.Size = UDim2.new(0, 40, 0, 40)
+ToggleBtn.Position = UDim2.new(0, 10, 0.5, -20)
+ToggleBtn.Text = "☰"
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.TextSize = 22
+ToggleBtn.ZIndex = 2
+Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(0, 8)
+
+-- Main Frame
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Size = UDim2.new(0, 250, 0, 160)
+Frame.Position = UDim2.new(0.3, 0, 0.3, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+Frame.Active = true
+Frame.Draggable = true
+Frame.Visible = false -- 🔥 Mặc định ẩn
+Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 12)
+
+local Title = Instance.new("TextLabel", Frame)
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundTransparency = 1
+Title.Text = "⚔️ Auto Attack"
+Title.TextColor3 = Color3.fromRGB(255,255,255)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 18
+
+local ExitBtn = Instance.new("TextButton", Frame)
+ExitBtn.Size = UDim2.new(0, 30, 0, 30)
+ExitBtn.Position = UDim2.new(1, -35, 0, 0)
+ExitBtn.Text = "X"
+ExitBtn.TextColor3 = Color3.fromRGB(255,255,255)
+ExitBtn.BackgroundColor3 = Color3.fromRGB(100,0,0)
+
+local MobBox = Instance.new("TextBox", Frame)
+MobBox.Size = UDim2.new(1, -20, 0, 30)
+MobBox.Position = UDim2.new(0, 10, 0, 40)
+MobBox.PlaceholderText = "Tên Mob..."
+MobBox.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+MobBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+local WeaponBox = Instance.new("TextBox", Frame)
+WeaponBox.Size = UDim2.new(1, -20, 0, 30)
+WeaponBox.Position = UDim2.new(0, 10, 0, 80)
+WeaponBox.PlaceholderText = "Tên Vũ Khí..."
+WeaponBox.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+WeaponBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+local StartBtn = Instance.new("TextButton", Frame)
+StartBtn.Size = UDim2.new(0.45, -5, 0, 30)
+StartBtn.Position = UDim2.new(0, 10, 0, 120)
+StartBtn.Text = "▶ Bắt đầu"
+StartBtn.TextColor3 = Color3.fromRGB(255,255,255)
+StartBtn.BackgroundColor3 = Color3.fromRGB(0,170,0)
+
+local StopBtn = Instance.new("TextButton", Frame)
+StopBtn.Size = UDim2.new(0.45, -5, 0, 30)
+StopBtn.Position = UDim2.new(0.5, 5, 0, 120)
+StopBtn.Text = "⏹ Dừng"
+StopBtn.TextColor3 = Color3.fromRGB(255,255,255)
+StopBtn.BackgroundColor3 = Color3.fromRGB(170,0,0)
+
+-- Logic
+local running = false
+
+local function getWeapon(name)
+    return LocalPlayer.Character:FindFirstChild(name) or LocalPlayer.Backpack:FindFirstChild(name)
+end
+
+local function findMobAnywhere(mobName)
+    for _, descendant in ipairs(workspace:GetDescendants()) do
+        if descendant:IsA("Model") and descendant.Name == mobName then
+            local targetPart = descendant:FindFirstChild("Torso") 
+                            or descendant:FindFirstChild("HumanoidRootPart") 
+                            or descendant:FindFirstChild("Right Leg") 
+                            or descendant:FindFirstChild("Left Leg")
+            local enemy = descendant:FindFirstChild("Enemy")
+            if targetPart and enemy then
+                return targetPart, enemy
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function attackLoop(mobName, weaponName)
+    while running do
+        local targetPart, enemy = findMobAnywhere(mobName)
+        local weapon = getWeapon(weaponName)
+        if targetPart and enemy and weapon then
+            local args = {targetPart, enemy, weapon}
+            ReplicatedStorage:WaitForChild("GameRemotes"):WaitForChild("DamageEvent"):FireServer(unpack(args))
+        end
+        task.wait(0.1)
+    end
+end
+
+-- Buttons
+ToggleBtn.MouseButton1Click:Connect(function()
+    Frame.Visible = not Frame.Visible
+end)
+
+StartBtn.MouseButton1Click:Connect(function()
+    if MobBox.Text ~= "" and WeaponBox.Text ~= "" then
+        running = true
+        task.spawn(function()
+            attackLoop(MobBox.Text, WeaponBox.Text)
+        end)
+    end
+end)
+
+StopBtn.MouseButton1Click:Connect(function()
+    running = false
+end)
+
+ExitBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+    running = false
+end)
