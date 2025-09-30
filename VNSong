@@ -1,0 +1,81 @@
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local MarketplaceService = game:GetService("MarketplaceService")
+
+-- GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "SongUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+
+-- Tạo Frame bao ngoài để kéo thả
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 360, 0, 70)
+mainFrame.Position = UDim2.new(0, 10, 0, 10)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+mainFrame.BackgroundTransparency = 0.4
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+
+-- Tạo TextLabel bên trong
+local songLabel = Instance.new("TextLabel")
+songLabel.Size = UDim2.new(1, -10, 1, -10)
+songLabel.Position = UDim2.new(0, 5, 0, 5)
+songLabel.BackgroundTransparency = 1
+songLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+songLabel.TextScaled = true
+songLabel.Font = Enum.Font.SourceSansBold
+songLabel.Text = "No song playing"
+songLabel.Parent = mainFrame
+
+-- Hàm lấy tên bài hát
+local function getSongName(sound)
+	if not sound or not sound:IsA("Sound") then
+		return "Unknown Song"
+	end
+
+	if sound.Name and sound.Name ~= "" and sound.Name ~= "CurrentSong" then
+		return sound.Name
+	end
+
+	local soundId = tostring(sound.SoundId)
+	local id = soundId:match("%d+")
+	if id then
+		local success, info = pcall(function()
+			return MarketplaceService:GetProductInfo(tonumber(id))
+		end)
+		if success and info and info.Name then
+			return info.Name
+		end
+		return "Song ID: " .. id
+	end
+
+	return "Unknown Song"
+end
+
+-- Hàm cập nhật GUI
+local function updateSong()
+	local currentSong = Workspace:FindFirstChild("CurrentSong")
+	if currentSong and currentSong:IsA("Sound") then
+		songLabel.Text = "Now Playing:\n" .. getSongName(currentSong)
+	else
+		songLabel.Text = "No song playing"
+	end
+end
+
+-- Sự kiện theo dõi nhạc
+Workspace.ChildAdded:Connect(function(child)
+	if child.Name == "CurrentSong" and child:IsA("Sound") then
+		updateSong()
+	end
+end)
+
+Workspace.ChildRemoved:Connect(function(child)
+	if child.Name == "CurrentSong" then
+		updateSong()
+	end
+end)
+
+-- Cập nhật ban đầu
+updateSong()
