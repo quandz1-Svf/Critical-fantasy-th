@@ -1,0 +1,249 @@
+-- Teleport to Door (search workspace.Level)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local guiParent = player:WaitForChild("PlayerGui")
+
+-- Utility: find folder "Level" under workspace
+local function getLevel()
+    return workspace:FindFirstChild("Level")
+end
+
+-- Recursively search under `root` for Instances named "Door"
+local function findDoors(root)
+    local doors = {}
+    if not root then return doors end
+    for _, child in ipairs(root:GetDescendants()) do
+        if child.Name == "Door" then
+            table.insert(doors, child)
+        end
+    end
+    return doors
+end
+
+-- Given a door Instance, return a BasePart position to teleport to (or nil)
+local function getDoorPart(doorInst)
+    if not doorInst then return nil end
+    -- if it's a Model, try PrimaryPart, then common part names, then any BasePart
+    if doorInst:IsA("Model") then
+        if doorInst.PrimaryPart and doorInst.PrimaryPart:IsA("BasePart") then
+            return doorInst.PrimaryPart
+        end
+        for _, name in ipairs({"Door", "Torso", "HumanoidRootPart", "Main", "Base"}) do
+            local p = doorInst:FindFirstChild(name)
+            if p and p:IsA("BasePart") then return p end
+        end
+        for _, d in ipairs(doorInst:GetDescendants()) do
+            if d:IsA("BasePart") then return d end
+        end
+        return nil
+    end
+    -- if it's already a BasePart
+    if doorInst:IsA("BasePart") then
+        return doorInst
+    end
+    return nil
+end
+
+-- Choose door: if text provided as name or numeric index, try that; else pick closest to player
+local function chooseDoor(doors, selector)
+    if not doors or #doors == 0 then return nil end
+    if selector and selector ~= "" then
+        -- trim
+        selector = selector:match("^%s*(.-)%s*$")
+        -- numeric?
+        local idx = tonumber(selector)
+        if idx and doors[idx] then return doors[idx] end
+        -- name match (case-insensitive)
+        for _, d in ipairs(doors) do
+            if string.lower(d.Name) == string.lower(selector) then
+                return d
+            end
+        end
+        -- substring
+        for _, d in ipairs(doors) do
+            if string.find(string.lower(d.Name), string.lower(selector), 1, true) then
+                return d
+            end
+        end
+        -- not found -> continue to choose nearest
+    end
+
+    -- choose nearest to player
+    local char = player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return doors[1] end -- fallback
+    local best, bestDist = nil, math.huge
+    for _, d in ipairs(doors) do
+        local part = getDoorPart(d)
+        if part then
+            local dist = (part.Position - hrp.Position).Magnitude
+            if dist < bestDist then
+                bestDist = dist
+                best = d
+            end
+        end
+    end
+    return best or doors[1]
+end
+
+-- Teleport HRP to a position (with small upward offset)
+local function teleportToPosition(pos)
+    local char = player.Character
+    if not char then return false, "Không có character" end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false, "Không có HumanoidRootPart" end
+    local ok, err = pcall(function()
+        hrp.CFrame = CFrame.new(pos + Vector3.new(0, 5, 0)) -- lên trên 5 studs
+    end)
+    if not ok then return false, err end
+    return true
+end
+
+-- High-level: find door(s), choose one, teleport
+local function gotoDoor(selectorText)
+    local level = getLevel()
+    if not level then return false, "Không tìm thấy workspace.Level" end
+
+    local doors = findDoors(level)
+    if #doors == 0 then return false, "Không tìm thấy Door trong Level" end
+
+    local chosen = chooseDoor(doors, selectorText)
+    if not chosen then return false, "Không chọn được Door" end
+
+    local doorPart = getDoorPart(chosen)
+    if not doorPart then return false, "Không tìm thấy part hợp lệ trong Door" end
+
+    local ok, err = teleportToPosition(doorPart.Position)
+    if not ok then return false, "Teleport lỗi: "..tostring(err) end
+
+    return true, ("Đã dịch chuyển tới Door: %s"):format(chosen:GetFullName())
+end
+
+-- ======= GUI (nhỏ, mobile-friendly, draggable) =======
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "GotoDoorGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = guiParent
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 300, 0, 120)
+frame.Position = UDim2.new(0.05, 0, 0.2, 0)
+frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+frame.Active = true
+frame.Draggable = true
+frame.Parent = screenGui
+
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, -60, 0, 28)
+title.Position = UDim2.new(0, 8, 0, 6)
+title.BackgroundTransparency = 1
+title.Text = "Go to Door (workspace.Level)"
+title.TextColor3 = Color3.fromRGB(230,230,230)
+title.TextScaled = true
+title.Font = Enum.Font.GothamSemibold
+
+local input = Instance.new("TextBox", frame)
+input.Size = UDim2.new(1, -16, 0, 30)
+input.Position = UDim2.new(0, 8, 0, 40)
+input.PlaceholderText = "Nhập tên hoặc số index cửa (optional)"
+input.Text = ""
+input.TextColor3 = Color3.fromRGB(200,255,200)
+input.BackgroundColor3 = Color3.fromRGB(45,45,45)
+input.Font = Enum.Font.Code
+input.TextScaled = false
+
+local goBtn = Instance.new("TextButton", frame)
+goBtn.Size = UDim2.new(0.6, -10, 0, 28)
+goBtn.Position = UDim2.new(0, 8, 1, -36)
+goBtn.Text = "Go to Door"
+goBtn.TextColor3 = Color3.fromRGB(255,255,255)
+goBtn.BackgroundColor3 = Color3.fromRGB(40,140,220)
+goBtn.Font = Enum.Font.GothamBold
+
+local listBtn = Instance.new("TextButton", frame)
+listBtn.Size = UDim2.new(0.35, -6, 0, 28)
+listBtn.Position = UDim2.new(0.62, 0, 1, -36)
+listBtn.Text = "List Doors"
+listBtn.TextColor3 = Color3.fromRGB(255,255,255)
+listBtn.BackgroundColor3 = Color3.fromRGB(120,120,120)
+listBtn.Font = Enum.Font.GothamBold
+
+local status = Instance.new("TextLabel", frame)
+status.Size = UDim2.new(1, -16, 0, 18)
+status.Position = UDim2.new(0, 8, 1, -58)
+status.BackgroundTransparency = 1
+status.Text = "Ready"
+status.TextColor3 = Color3.fromRGB(200,200,200)
+status.TextScaled = false
+status.Font = Enum.Font.SourceSans
+
+local closeBtn = Instance.new("TextButton", frame)
+closeBtn.Size = UDim2.new(0, 28, 0, 28)
+closeBtn.Position = UDim2.new(1, -36, 0, 6)
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+closeBtn.BackgroundColor3 = Color3.fromRGB(160,40,40)
+closeBtn.Font = Enum.Font.SourceSansBold
+
+-- List doors (prints to Output and shows brief message)
+listBtn.MouseButton1Click:Connect(function()
+    local level = getLevel()
+    if not level then
+        status.Text = "Không tìm thấy Level"
+        return
+    end
+    local doors = findDoors(level)
+    if #doors == 0 then
+        status.Text = "Không Door nào"
+        return
+    end
+    -- show enumerated list in Output and short UI msg
+    for i, d in ipairs(doors) do
+        local p = getDoorPart(d)
+        if p then
+            print(("Door [%d] = %s  pos=%.2f, %.2f, %.2f"):format(i, d:GetFullName(), p.Position.X, p.Position.Y, p.Position.Z))
+        else
+            print(("Door [%d] = %s  (no part)"):format(i, d:GetFullName()))
+        end
+    end
+    status.Text = ("Found %d doors (see Output)"):format(#doors)
+end)
+
+goBtn.MouseButton1Click:Connect(function()
+    local sel = (input.Text or ""):match("^%s*(.-)%s*$")
+    status.Text = "Working..."
+    local ok, msg = pcall(function() return gotoDoor(sel) end)
+    if ok and type(msg) == "table" then
+        -- some pcall returns table; but our gotoDoor returns boolean,msg
+        ok = msg[1]; msg = msg[2]
+    end
+    if ok then
+        if msg then
+            status.Text = tostring(msg)
+        else
+            status.Text = "Done"
+        end
+    else
+        status.Text = "Lỗi: "..tostring(msg)
+        warn("GotoDoor error:", msg)
+    end
+    -- clear after 3s
+    task.delay(3, function()
+        if status and status.Parent then status.Text = "Ready" end
+    end)
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    screenGui:Destroy()
+end)
+
+-- Keep GUI after respawn
+player.CharacterAdded:Connect(function()
+    task.wait(0.2)
+    if not screenGui.Parent then screenGui.Parent = player:WaitForChild("PlayerGui") end
+end)
+
+print("GotoDoor GUI loaded. Open Explorer -> look for workspace.Level to verify structure.")
